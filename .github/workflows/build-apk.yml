@@ -24,8 +24,14 @@ jobs:
           test -f build/lib/libvt_eboot.so
       - name: Android SDK
         run: |
-          yes | sdkmanager --licenses > /dev/null || true
-          sdkmanager "platforms;android-36" "build-tools;36.0.0"
+          SDKM="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKM" ]; then SDKM="$(command -v sdkmanager || true)"; fi
+          echo "sdkmanager: $SDKM"
+          test -x "$SDKM"
+          set +o pipefail
+          yes | "$SDKM" --licenses > /dev/null || true
+          set -o pipefail
+          "$SDKM" "platforms;android-36" "build-tools;36.0.0"
       - name: Build
         working-directory: android
         run: |
