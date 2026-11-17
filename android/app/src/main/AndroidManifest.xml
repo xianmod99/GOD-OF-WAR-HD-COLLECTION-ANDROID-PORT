@@ -46,6 +46,13 @@
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|keyboard|navigation|uiMode|density"
             android:resizeableActivity="false" />
 
+        <!-- tela "Mapear botões do controle" (grava padmap.txt na pasta do jogo) -->
+        <activity
+            android:name=".MapearControleActivity"
+            android:exported="false"
+            android:screenOrientation="sensorLandscape"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|keyboard|navigation|uiMode|density" />
+
         <activity
             android:name=".RelaunchActivity"
             android:process=":relanca"
