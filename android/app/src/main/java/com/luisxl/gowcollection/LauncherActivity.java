@@ -429,7 +429,10 @@ public final class LauncherActivity extends Activity {
                     }
                     act.jogar(LIBS[jogo]);
                     return;
-                case F_CONTROLES: case F_PREVIA:
+                case F_CONTROLES: // ícone do controle no alto: mapear os botões do controle físico
+                    act.startActivity(new Intent(act, MapearControleActivity.class));
+                    return;
+                case F_PREVIA:
                     act.jogar(GameActivity.PREVIA);
                     return;
                 case F_DRIVER:
@@ -581,7 +584,7 @@ public final class LauncherActivity extends Activity {
             if ((foco >= F_TROFEUS && foco <= F_DRIVER) || foco == F_GITHUB) {
                 String r = foco == F_GITHUB ? "GitHub  ·  luisxl15" : foco == F_TROFEUS ? Tr.t("Troféus") : foco == F_IDIOMA ? Tr.t("Idioma: ") + Idioma.nome(Idioma.atual(act))
                         : foco == F_TELA ? Tr.t("Tela: proporção e texturas HD")
-                        : foco == F_CONTROLES ? Tr.t("Controles na tela") : Tr.t("Driver de vídeo");
+                        : foco == F_CONTROLES ? Tr.t("Mapear botões do controle") : Tr.t("Driver de vídeo");
                 Paint t = texto(13, true, 0xFFFFFFFF);
                 t.setTextAlign(Paint.Align.RIGHT);
                 t.setShadowLayer(4 * dp, 0, 1 * dp, 0xAA000000);
