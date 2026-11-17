@@ -1,7 +1,9 @@
 package com.luisxl.gowcollection;
 
 import android.app.Activity;
+import android.content.Context;
 import android.content.Intent;
+import android.hardware.input.InputManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
@@ -81,9 +83,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
 
     // o que a tela e o controle físico pedem, somados em enviar()
     private int telaBotoes, telaLx = 128, telaLy = 128, telaRx = 128, telaRy = 128;
-    private int fisBotoes;
-    private float fisLx, fisLy, fisRx, fisRy, fisL2, fisR2;
-    private int hatBotoes;
+    private final PadFisico pad = new PadFisico(); // controle USB/OTG/Bluetooth: botões, direcional, gatilhos, 2 analógicos
 
     @Override
     protected void onCreate(Bundle b) {
@@ -114,6 +114,7 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
             getOnBackInvokedDispatcher().registerOnBackInvokedCallback(android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT, this::voltarDoSistema);
         Pastas.carregar(this);
         File pasta = Pastas.raiz();
+        pad.carregarMapa(new File(pasta, "padmap.txt")); // opcional: corrige o layout de um controle sem recompilar
         Arte.carregar(pasta);
         Arte.carregarBases(getAssets());
         if (previa) raiz.addView(new Fundo(this));
@@ -201,17 +202,23 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
     public void onWindowFocusChanged(boolean foco) {
         super.onWindowFocusChanged(foco);
         if (foco) telaCheia();
+        else soltarControleFisico(); // sem foco não chegam os "soltou": nada fica preso
     }
 
     @Override
     protected void onResume() {
         super.onResume();
         nativeVisible(true);
+        InputManager im = (InputManager) getSystemService(Context.INPUT_SERVICE);
+        if (im != null) im.registerInputDeviceListener(ouvinteControles, ui);
     }
 
     @Override
     protected void onPause() {
         nativeVisible(false);
+        InputManager im = (InputManager) getSystemService(Context.INPUT_SERVICE);
+        if (im != null) im.unregisterInputDeviceListener(ouvinteControles);
+        soltarControleFisico();
         super.onPause();
     }
 
@@ -332,17 +339,16 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
         }
     }
 
-    // botões somados; analógico: o mais inclinado entre a tela e o controle
+    // HYBRID INPUT: botões somados (OU) da tela e do controle físico; cada analógico: o mais inclinado entre a tela e o
+    // controle. Um não desliga o outro: quem estiver acionado vale, e os dois podem valer ao mesmo tempo.
     private void enviar(int ativo) {
-        int b = telaBotoes | fisBotoes | hatBotoes;
-        if (fisL2 > 0.5f) b |= ControlesView.L2;
-        if (fisR2 > 0.5f) b |= ControlesView.R2;
+        int b = telaBotoes | pad.botoes(); // pad.botoes(): botões, direcional (tecla e HAT) e L2/R2 (tecla ou gatilho)
         int lx = telaLx, ly = telaLy, rx = telaRx, ry = telaRy;
-        if (Math.hypot(fisLx, fisLy) * 127 > Math.hypot(lx - 128, ly - 128)) {
-            lx = eixo(fisLx); ly = eixo(fisLy);
+        if (Math.hypot(pad.lx(), pad.ly()) * 127 > Math.hypot(lx - 128, ly - 128)) {
+            lx = eixo(pad.lx()); ly = eixo(pad.ly());
         }
-        if (Math.hypot(fisRx, fisRy) * 127 > Math.hypot(rx - 128, ry - 128)) {
-            rx = eixo(fisRx); ry = eixo(fisRy);
+        if (Math.hypot(pad.rx(), pad.ry()) * 127 > Math.hypot(rx - 128, ry - 128)) {
+            rx = eixo(pad.rx()); ry = eixo(pad.ry());
         }
         nativePad(b, lx, ly, rx, ry, ativo);
     }
@@ -350,33 +356,24 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
     private static int eixo(float v) { return Math.max(0, Math.min(255, Math.round(128 + v * 127))); }
 
     // ---------------------------------------------------------------- controle físico
-    private static boolean doControle(InputDevice d) {
-        if (d == null) return false;
-        int s = d.getSources();
-        return (s & InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD
-                || (s & InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK;
-    }
+    // o controle saiu (ou trocou de configuração): solta o que ele segurava
+    private final InputManager.InputDeviceListener ouvinteControles = new InputManager.InputDeviceListener() {
+        @Override public void onInputDeviceAdded(int id) { }
 
-    private static int botaoDoControle(int k) {
-        switch (k) {
-            case KeyEvent.KEYCODE_BUTTON_A: return ControlesView.CRUZ;
-            case KeyEvent.KEYCODE_BUTTON_B: return ControlesView.CIRCULO;
-            case KeyEvent.KEYCODE_BUTTON_X: return ControlesView.QUADRADO;
-            case KeyEvent.KEYCODE_BUTTON_Y: return ControlesView.TRIANGULO;
-            case KeyEvent.KEYCODE_BUTTON_L1: return ControlesView.L1;
-            case KeyEvent.KEYCODE_BUTTON_R1: return ControlesView.R1;
-            case KeyEvent.KEYCODE_BUTTON_L2: return ControlesView.L2;
-            case KeyEvent.KEYCODE_BUTTON_R2: return ControlesView.R2;
-            case KeyEvent.KEYCODE_BUTTON_THUMBL: return ControlesView.L3;
-            case KeyEvent.KEYCODE_BUTTON_THUMBR: return ControlesView.R3;
-            case KeyEvent.KEYCODE_BUTTON_START: return ControlesView.START;
-            case KeyEvent.KEYCODE_BUTTON_SELECT: return ControlesView.SELECT;
-            case KeyEvent.KEYCODE_DPAD_UP: return ControlesView.CIMA;
-            case KeyEvent.KEYCODE_DPAD_DOWN: return ControlesView.BAIXO;
-            case KeyEvent.KEYCODE_DPAD_LEFT: return ControlesView.ESQUERDA;
-            case KeyEvent.KEYCODE_DPAD_RIGHT: return ControlesView.DIREITA;
-            default: return 0;
+        @Override public void onInputDeviceRemoved(int id) {
+            pad.remover(id);
+            enviar(0);
         }
+
+        @Override public void onInputDeviceChanged(int id) {
+            pad.remover(id); // o perfil de eixos é remontado no próximo evento
+            enviar(0);
+        }
+    };
+
+    private void soltarControleFisico() {
+        pad.limpar();
+        enviar(0);
     }
 
     // teclado físico nos códigos VK_ do Windows, que é como o mapa de teclado do jogo está escrito
@@ -407,14 +404,10 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
             return super.dispatchKeyEvent(e);
         boolean desce = e.getAction() == KeyEvent.ACTION_DOWN;
         if (e.getAction() != KeyEvent.ACTION_DOWN && e.getAction() != KeyEvent.ACTION_UP) return super.dispatchKeyEvent(e);
-        if (doControle(e.getDevice()) || KeyEvent.isGamepadButton(k)) {
-            int bit = k == KeyEvent.KEYCODE_BACK ? ControlesView.SELECT : botaoDoControle(k);
-            if (bit != 0) {
-                fisBotoes = desce ? fisBotoes | bit : fisBotoes & ~bit;
-                controles.controleFisico();
-                enviar(2);
-                return true;
-            }
+        if (pad.tecla(e)) { // botão do controle (padrão Android ou joystick HID genérico) virou botão do Vita
+            if (desce && pad.ativo()) controles.controleFisico();
+            enviar(2);
+            return true;
         }
         int vk = tecla(k);
         if (vk != 0) {
@@ -427,20 +420,11 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
 
     @Override
     public boolean dispatchGenericMotionEvent(MotionEvent e) {
-        if (doControle(e.getDevice()) && e.getAction() == MotionEvent.ACTION_MOVE) {
-            InputDevice d = e.getDevice();
-            fisLx = zona(e, d, MotionEvent.AXIS_X);
-            fisLy = zona(e, d, MotionEvent.AXIS_Y);
-            fisRx = zona(e, d, MotionEvent.AXIS_Z);
-            fisRy = zona(e, d, MotionEvent.AXIS_RZ);
-            fisL2 = Math.max(e.getAxisValue(MotionEvent.AXIS_LTRIGGER), e.getAxisValue(MotionEvent.AXIS_BRAKE));
-            fisR2 = Math.max(e.getAxisValue(MotionEvent.AXIS_RTRIGGER), e.getAxisValue(MotionEvent.AXIS_GAS));
-            float hx = e.getAxisValue(MotionEvent.AXIS_HAT_X), hy = e.getAxisValue(MotionEvent.AXIS_HAT_Y);
-            hatBotoes = (hx < -0.5f ? ControlesView.ESQUERDA : 0) | (hx > 0.5f ? ControlesView.DIREITA : 0)
-                    | (hy < -0.5f ? ControlesView.CIMA : 0) | (hy > 0.5f ? ControlesView.BAIXO : 0);
-            if (Math.abs(fisLx) + Math.abs(fisLy) + Math.abs(fisRx) + Math.abs(fisRy) + fisL2 + fisR2 > 0.2f || hatBotoes != 0)
-                controles.controleFisico();
-            enviar(2);
+        if (PadFisico.daFonte(e.getDevice()) && e.getAction() == MotionEvent.ACTION_MOVE) {
+            if (pad.movimento(e)) { // só quando algo mudou: evento repetido não marca "controle em uso" à toa
+                if (pad.ativo()) controles.controleFisico();
+                enviar(2);
+            }
             return true;
         }
         if (e.isFromSource(InputDevice.SOURCE_MOUSE)) { // botões do mouse para o mapa de teclado/mouse do jogo
@@ -450,14 +434,6 @@ public final class GameActivity extends Activity implements SurfaceHolder.Callba
             nativeKey(0x04, (bs & MotionEvent.BUTTON_TERTIARY) != 0);
         }
         return super.dispatchGenericMotionEvent(e);
-    }
-
-    private static float zona(MotionEvent e, InputDevice d, int eixo) {
-        float v = e.getAxisValue(eixo);
-        InputDevice.MotionRange r = d.getMotionRange(eixo, e.getSource());
-        float z = r != null ? Math.max(r.getFlat(), 0.12f) : 0.12f;
-        if (Math.abs(v) < z) return 0;
-        return Math.signum(v) * (Math.abs(v) - z) / (1 - z);
     }
 
     // ---------------------------------------------------------------- chamado pelo vitart (jni.cpp)

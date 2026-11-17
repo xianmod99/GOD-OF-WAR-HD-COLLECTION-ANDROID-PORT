@@ -193,13 +193,17 @@ final class ControlesView extends View {
         if (w > 0 && h > 0) redesenhar();
     }
 
-    // um controle físico mexeu: os botões da tela somem até alguém tocar na tela
+    // Os botões da tela somem quando o controle físico é usado, até alguém tocar na tela (false: ficam sempre à vista).
+    private static final boolean AUTO_ESCONDER = true;
+
+    // um controle físico mexeu. HYBRID: isso só esconde o desenho, e só com a tela livre; nunca solta um dedo que está
+    // num botão, analógico ou no painel de toque, e o próximo toque volta tudo na hora (onTouchEvent)
     void controleFisico() {
-        if (!autoEscondidos) {
-            autoEscondidos = true;
-            soltarTudo();
-            invalidate();
-        }
+        if (!AUTO_ESCONDER || autoEscondidos) return;
+        if (dedoTela >= 0) return;
+        for (Controle c : controles) if (c.dedo >= 0) return;
+        autoEscondidos = true;
+        invalidate();
     }
 
     private boolean visiveis() { return !escondidos && !autoEscondidos; }
